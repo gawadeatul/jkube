@@ -13,6 +13,7 @@
  */
 package org.eclipse.jkube.maven.plugin.mojo.build;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.maven.artifact.DependencyResolutionRequiredException;
 import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.shared.filtering.MavenFileFilter;
@@ -26,6 +27,8 @@ import org.eclipse.jkube.kit.common.util.EnvUtil;
 import org.eclipse.jkube.kit.common.util.LazyBuilder;
 import org.eclipse.jkube.kit.common.util.MavenUtil;
 import org.eclipse.jkube.kit.common.util.ResourceUtil;
+import org.eclipse.jkube.kit.common.util.ResourceFileProcessing;
+import org.eclipse.jkube.kit.common.util.ResourceFileProcessors;
 import org.eclipse.jkube.kit.common.access.ClusterConfiguration;
 
 import org.apache.maven.execution.MavenSession;
@@ -45,11 +48,17 @@ import org.eclipse.jkube.kit.config.resource.RuntimeMode;
 import org.eclipse.jkube.kit.config.service.JKubeServiceHub;
 import org.eclipse.jkube.kit.resource.service.DefaultResourceService;
 import org.eclipse.jkube.maven.plugin.mojo.KitLoggerProvider;
-import org.sonatype.plexus.components.sec.dispatcher.SecDispatcher;
-import org.sonatype.plexus.components.sec.dispatcher.SecDispatcherException;
+import org.apache.maven.settings.Server;
+import org.apache.maven.settings.building.SettingsProblem;
+import org.apache.maven.settings.crypto.DefaultSettingsDecryptionRequest;
+import org.apache.maven.settings.crypto.SettingsDecrypter;
+import org.apache.maven.settings.crypto.SettingsDecryptionResult;
+import javax.inject.Inject;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.Collections;
 import java.util.Optional;
 
@@ -139,8 +148,12 @@ public abstract class AbstractJKubeMojo extends AbstractMojo implements KitLogge
     @Parameter
     protected ClusterConfiguration access;
 
-    @Component(role = org.sonatype.plexus.components.sec.dispatcher.SecDispatcher.class, hint = "default")
-    protected SecDispatcher securityDispatcher;
+    protected SettingsDecrypter settingsDecrypter;
+
+    @Inject
+    void setSettingsDecrypter(SettingsDecrypter settingsDecrypter) {
+        this.settingsDecrypter = settingsDecrypter;
+    }
 
     protected KitLogger log;
 
@@ -153,16 +166,16 @@ public abstract class AbstractJKubeMojo extends AbstractMojo implements KitLogge
 
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
-        init();
+        log = createLogger(null);
         if (shouldSkip()) {
             log.info("`%s` goal is skipped.", mojoExecution.getMojoDescriptor().getFullGoalName());
             return;
         }
+        init();
         executeInternal();
     }
 
     protected void init() throws MojoFailureException {
-        log = createLogger(null);
         clusterConfiguration = initClusterConfiguration();
         try {
           javaProject = MavenUtil.convertMavenProjectToJKubeProject(project, session);
@@ -255,12 +268,22 @@ public abstract class AbstractJKubeMojo extends AbstractMojo implements KitLogge
     }
 
     String decrypt(String password) {
-        try {
-            return securityDispatcher.decrypt(password);
-        } catch (SecDispatcherException e) {
-            getKitLogger().error("Failure in decrypting password");
+        final Server stub = new Server();
+        stub.setPassword(password);
+        final SettingsDecryptionResult result =
+            settingsDecrypter.decrypt(new DefaultSettingsDecryptionRequest(stub));
+        for (SettingsProblem problem : result.getProblems()) {
+            getKitLogger().error("Failed to decrypt password: %s", problem);
         }
-        return password;
+        final Server decrypted = result.getServer();
+        return decrypted != null ? decrypted.getPassword() : password;
+    }
+
+    protected void cleanWorkDirectory() throws IOException {
+        if (workDir.exists()) {
+            getKitLogger().verbose("Cleaning work directory: %s", workDir);
+            FileUtils.cleanDirectory(workDir);
+        }
     }
 
     private File[] mavenFilterFiles(File[] resourceFiles, File outDir) throws IOException {
@@ -270,20 +293,25 @@ public abstract class AbstractJKubeMojo extends AbstractMojo implements KitLogge
         if (!outDir.exists() && !outDir.mkdirs()) {
             throw new IOException("Cannot create working dir " + outDir);
         }
-        File[] ret = new File[resourceFiles.length];
-        int i = 0;
-        for (File resource : resourceFiles) {
-            File targetFile = new File(outDir, resource.getName());
-            try {
-                mavenFileFilter.copyFile(resource, targetFile, true,
-                  project, null, false, "utf8", session);
-                ret[i++] = targetFile;
-            } catch (MavenFilteringException exp) {
-                throw new IOException(
-                  String.format("Cannot filter %s to %s", resource, targetFile), exp);
-            }
-        }
-        return ret;
+
+        return ResourceFileProcessing.builder()
+          .withFiles(resourceFiles)
+          .withOutputDirectory(outDir)
+          .addProcessor(context -> {
+              try {
+                  File tempFile = File.createTempFile("jkube-resource-", ".tmp", outDir);
+                  try {
+                      mavenFileFilter.copyFile(context.getSourceFile(), tempFile, true, project, null, false, "utf8", session);
+                      return new String(Files.readAllBytes(tempFile.toPath()), StandardCharsets.UTF_8);
+                  } finally {
+                      Files.deleteIfExists(tempFile.toPath());
+                  }
+              } catch (MavenFilteringException exp) {
+                  throw new IOException(String.format("Cannot filter %s to %s", context.getSourceFile(), context.getTargetFile()), exp);
+              }
+          })
+          .addProcessor(ResourceFileProcessors.mergeYamlIfExists())
+          .process();
     }
 }
 

@@ -14,14 +14,17 @@
 package org.eclipse.jkube.gradle.plugin.task;
 
 import com.marcnuri.helm.Helm;
+import io.fabric8.kubeapitest.junit.EnableKubeAPIServer;
+import io.fabric8.kubeapitest.junit.KubeConfig;
+import io.fabric8.kubernetes.client.Config;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
-import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
+import io.fabric8.kubernetes.client.KubernetesClientBuilder;
 import org.apache.commons.io.FileUtils;
 import org.eclipse.jkube.gradle.plugin.KubernetesExtension;
 import org.eclipse.jkube.gradle.plugin.TestKubernetesExtension;
 import org.eclipse.jkube.kit.common.access.ClusterConfiguration;
 import org.eclipse.jkube.kit.resource.helm.HelmConfig;
+import org.gradle.api.provider.Property;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,25 +35,31 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
-import static org.eclipse.jkube.kit.common.util.KubernetesMockServerUtil.prepareMockWebServerExpectationsForAggregatedDiscoveryEndpoints;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-@EnableKubernetesMockClient(crud = true)
+@EnableKubeAPIServer
 class KubernetesHelmInstallTaskTest {
   @RegisterExtension
   private final TaskEnvironmentExtension taskEnvironment = new TaskEnvironmentExtension();
+  @KubeConfig
+  static String kubeConfigYaml;
   private KubernetesClient kubernetesClient;
-  private KubernetesMockServer server;
   private TestKubernetesExtension extension;
 
   @BeforeEach
   void setUp() throws IOException {
     extension = new TestKubernetesExtension();
-    // Remove after https://github.com/fabric8io/kubernetes-client/issues/6062 is fixed
-    prepareMockWebServerExpectationsForAggregatedDiscoveryEndpoints(server);
+    kubernetesClient = new KubernetesClientBuilder().withConfig(Config.fromKubeconfig(kubeConfigYaml)).build();
+    kubernetesClient.apps().deployments().withTimeout(1, TimeUnit.SECONDS).delete();
+    kubernetesClient.pods().withTimeout(1, TimeUnit.SECONDS).delete();
+    kubernetesClient.configMaps().withTimeout(1, TimeUnit.SECONDS).delete();
+    kubernetesClient.secrets().withTimeout(1, TimeUnit.SECONDS).delete();
     Helm.create().withDir(taskEnvironment.getRoot().toPath()).withName("empty-project").call();
     Path helmChartOutputDir = taskEnvironment.getRoot().toPath().resolve("build").resolve("jkube").resolve("helm");
     Files.createDirectories(helmChartOutputDir.resolve("kubernetes"));
@@ -76,6 +85,7 @@ class KubernetesHelmInstallTaskTest {
 
   @AfterEach
   void tearDown() {
+    kubernetesClient.close();
     System.clearProperty("jkube.kubernetesTemplate");
   }
 
@@ -119,5 +129,25 @@ class KubernetesHelmInstallTaskTest {
       .isThrownBy(kubernetesHelmInstallTask::runTask)
       .withMessage("An error occurred while checking for chart dependencies. " +
         "You may need to run `helm dependency build` to fetch missing dependencies: found in Chart.yaml, but missing in charts/ directory: the-dependency");
+  }
+
+  @Test
+  void runTask_withSkip_shouldDoNothing() {
+    // Given
+    extension = new TestKubernetesExtension() {
+      @Override
+      public Property<Boolean> getSkip() {
+        return super.getSkip().value(true);
+      }
+    };
+    when(taskEnvironment.project.getExtensions().getByType(KubernetesExtension.class)).thenReturn(extension);
+    final KubernetesHelmInstallTask task = new KubernetesHelmInstallTask(KubernetesExtension.class);
+    when(task.getName()).thenReturn("k8sHelmInstall");
+
+    // When
+    task.runTask();
+
+    // Then
+    verify(taskEnvironment.logger, times(1)).lifecycle(contains("k8s: `k8sHelmInstall` task is skipped."));
   }
 }

@@ -20,7 +20,7 @@
   <parent>
     <groupId>org.eclipse.jkube</groupId>
     <artifactId>jkube</artifactId>
-    <version>1.18-SNAPSHOT</version>
+    <version>1.20-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
@@ -34,35 +34,36 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-    <version.bouncycastle.bcpkix>1.78.1</version.bouncycastle.bcpkix>
-    <version.commons-codec>1.17.0</version.commons-codec>
-    <version.commons-lang3>3.14.0</version.commons-lang3>
-    <version.commons-text>1.12.0</version.commons-text>
-    <version.gson>2.10.1</version.gson>
+    <version.bouncycastle.bcpkix>1.82</version.bouncycastle.bcpkix>
+    <version.commons-codec>1.22.0</version.commons-codec>
+    <version.commons-lang3>3.20.0</version.commons-lang3>
+    <version.commons-text>1.14.0</version.commons-text>
+    <version.gson>2.14.0</version.gson>
     <version.httpcore>4.4.16</version.httpcore>
     <version.httpclient>4.5.14</version.httpclient>
     <version.ianaservicehelper>0.0.1</version.ianaservicehelper>
-    <version.jansi>2.4.1</version.jansi>
-    <version.javassist>3.30.2-GA</version.javassist>
+    <version.jansi>2.4.3</version.jansi>
+    <version.javassist>3.32.0-GA</version.javassist>
     <!-- Don't upgrade Eclipse JGit to 6.x for Java 8 compatibility -->
-    <version.jgit>5.13.3.202401111512-r</version.jgit>
-    <version.jnr-unixsocket>0.38.22</version.jnr-unixsocket>
+    <version.jgit>5.13.5.202508271544-r</version.jgit>
+    <version.jnr-unixsocket>0.39.2</version.jnr-unixsocket>
     <version.jsr305>3.0.2</version.jsr305>
-    <version.maven-archiver>3.6.2</version.maven-archiver>
+    <version.maven-archiver>3.6.5</version.maven-archiver>
     <version.maven-core>3.8.1</version.maven-core>
-    <version.maven-filtering>3.3.2</version.maven-filtering>
-    <version.maven-plugin-annotations>3.13.0</version.maven-plugin-annotations>
-    <version.networknt.validator>1.4.0</version.networknt.validator>
+    <version.maven-filtering>3.4.0</version.maven-filtering>
+    <version.maven-plugin-annotations>3.15.1</version.maven-plugin-annotations>
+    <version.networknt.validator>1.5.9</version.networknt.validator>
     <version.openshift-client>${version.kubernetes-client}</version.openshift-client>
-    <version.plexus-classworlds>2.8.0</version.plexus-classworlds>
+    <version.plexus-classworlds>2.9.0</version.plexus-classworlds>
     <version.plexus-build-api>0.0.7</version.plexus-build-api>
-    <version.plexus-utils>3.5.0</version.plexus-utils>
+    <version.plexus-utils>4.0.3</version.plexus-utils>
+    <version.plexus-xml>3.0.2</version.plexus-xml>
     <version.shrinkwrap>1.2.6</version.shrinkwrap>
     <version.validation-api>2.0.1.Final</version.validation-api>
-    <version.ow2.asm>9.7</version.ow2.asm>
+    <version.ow2.asm>9.10.1</version.ow2.asm>
 
     <!-- =======================================================  -->
-    <version.image.jkube-images>0.0.24</version.image.jkube-images>
+    <version.image.jkube-images>0.0.28</version.image.jkube-images>
     <version.image.ubi-minimal>9.3</version.image.ubi-minimal>
     <!-- === Java base image versions for docker, s2i (istag == s2i) -->
     <!-- Upstream -->
@@ -97,6 +98,21 @@
     <image.java11.upstream.docker>quay.io/jkube/jkube-java-11:${version.image.java.upstream.docker}</image.java11.upstream.docker>
     <image.java11.upstream.istag>jkube-java-11:${version.image.java.upstream.s2i}</image.java11.upstream.istag>
 
+    <!-- java 17 -->
+    <image.java17.upstream.s2i>quay.io/jkube/jkube-java-17:${version.image.java.upstream.s2i}</image.java17.upstream.s2i>
+    <image.java17.upstream.docker>quay.io/jkube/jkube-java-17:${version.image.java.upstream.docker}</image.java17.upstream.docker>
+    <image.java17.upstream.istag>jkube-java-17:${version.image.java.upstream.s2i}</image.java17.upstream.istag>
+
+    <!-- java 21 -->
+    <image.java21.upstream.s2i>quay.io/jkube/jkube-java-21:${version.image.java.upstream.s2i}</image.java21.upstream.s2i>
+    <image.java21.upstream.docker>quay.io/jkube/jkube-java-21:${version.image.java.upstream.docker}</image.java21.upstream.docker>
+    <image.java21.upstream.istag>jkube-java-21:${version.image.java.upstream.s2i}</image.java21.upstream.istag>
+
+    <!-- java 25 -->
+    <image.java25.upstream.s2i>quay.io/jkube/jkube-java-25:${version.image.java.upstream.s2i}</image.java25.upstream.s2i>
+    <image.java25.upstream.docker>quay.io/jkube/jkube-java-25:${version.image.java.upstream.docker}</image.java25.upstream.docker>
+    <image.java25.upstream.istag>jkube-java-25:${version.image.java.upstream.s2i}</image.java25.upstream.istag>
+
     <!-- Helidon -->
     <image.helidon-native.upstream.s2i>registry.access.redhat.com/ubi9/ubi-minimal:${version.image.ubi-minimal}</image.helidon-native.upstream.s2i>
     <image.helidon-native.upstream.docker>registry.access.redhat.com/ubi9/ubi-minimal:${version.image.ubi-minimal}</image.helidon-native.upstream.docker>
@@ -113,9 +129,9 @@
     <image.micronaut-native.upstream.istag>registry.access.redhat.com/ubi9/ubi-minimal:${version.image.ubi-minimal}</image.micronaut-native.upstream.istag>
 
     <!-- Quarkus -->
-    <image.quarkus-native.upstream.s2i>quay.io/quarkus/ubi-quarkus-native-binary-s2i:1.0</image.quarkus-native.upstream.s2i>
+    <image.quarkus-native.upstream.s2i>quay.io/quarkus/ubi9-quarkus-native-binary-s2i:2.0</image.quarkus-native.upstream.s2i>
     <image.quarkus-native.upstream.docker>registry.access.redhat.com/ubi9/ubi-minimal:${version.image.ubi-minimal}</image.quarkus-native.upstream.docker>
-    <image.quarkus-native.upstream.istag>quay.io/quarkus/ubi-quarkus-native-binary-s2i:1.0</image.quarkus-native.upstream.istag>
+    <image.quarkus-native.upstream.istag>quay.io/quarkus/ubi9-quarkus-native-binary-s2i:2.0</image.quarkus-native.upstream.istag>
 
     <!-- karaf -->
     <image.karaf.upstream.docker>quay.io/jkube/jkube-karaf:${version.image.karaf.upstream.docker}</image.karaf.upstream.docker>
@@ -124,14 +140,15 @@
 
     <!-- webapp -->
     <image.tomcat.upstream>quay.io/jkube/jkube-tomcat:${version.image.tomcat.upstream}</image.tomcat.upstream>
-    <image.jetty.upstream>quay.io/jkube/jkube-jetty9:${version.image.jetty.upstream}</image.jetty.upstream>
+    <image.jetty.upstream>quay.io/jkube/jkube-jetty12:${version.image.jetty.upstream}</image.jetty.upstream>
+    <image.jetty9.upstream>quay.io/jkube/jkube-jetty9:${version.image.jetty.upstream}</image.jetty9.upstream>
     <image.wildfly.upstream.docker>jboss/wildfly:${version.image.wildfly.upstream.docker}</image.wildfly.upstream.docker>
     <image.wildfly.upstream.s2i>quay.io/wildfly/wildfly-centos7:${version.image.wildfly.upstream.s2i}</image.wildfly.upstream.s2i>
     <image.wildfly.upstream.istag>wildfly:${version.image.wildfly.upstream.s2i}</image.wildfly.upstream.istag>
 
-    <jib-core.version>0.27.0</jib-core.version>
+    <jib-core.version>0.28.1</jib-core.version>
 
-    <pack.version>0.34.2</pack.version>
+    <pack.version>0.40.7</pack.version>
     <pack.windows.binary-extension>exe</pack.windows.binary-extension>
     <pack.linux.artifact>https://github.com/buildpacks/pack/releases/download/v${pack.version}/pack-v${pack.version}-linux.tgz</pack.linux.artifact>
     <pack.linux-arm64.artifact>https://github.com/buildpacks/pack/releases/download/v${pack.version}/pack-v${pack.version}-linux-arm64.tgz</pack.linux-arm64.artifact>
@@ -452,15 +469,21 @@
       </dependency>
 
       <dependency>
+        <groupId>com.google.code.gson</groupId>
+        <artifactId>gson</artifactId>
+        <version>${version.gson}</version>
+      </dependency>
+
+      <dependency>
         <groupId>com.google.guava</groupId>
         <artifactId>guava</artifactId>
         <version>${version.guava}</version>
       </dependency>
 
       <dependency>
-        <groupId>com.google.code.gson</groupId>
-        <artifactId>gson</artifactId>
-        <version>${version.gson}</version>
+        <groupId>com.google.errorprone</groupId>
+        <artifactId>error_prone_annotations</artifactId>
+        <version>${version.error_prone_annotations}</version>
       </dependency>
 
       <dependency>
@@ -698,6 +721,12 @@
       </dependency>
 
       <dependency>
+        <groupId>org.codehaus.plexus</groupId>
+        <artifactId>plexus-xml</artifactId>
+        <version>${version.plexus-xml}</version>
+      </dependency>
+
+      <dependency>
         <groupId>org.sonatype.plexus</groupId>
         <artifactId>plexus-build-api</artifactId>
         <version>${version.plexus-build-api}</version>
@@ -720,6 +749,13 @@
 
       <dependency>
         <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter-api</artifactId>
+        <version>${version.junit5}</version>
+        <scope>test</scope>
+      </dependency>
+
+      <dependency>
+        <groupId>org.junit.jupiter</groupId>
         <artifactId>junit-jupiter-engine</artifactId>
         <version>${version.junit5}</version>
         <scope>test</scope>
@@ -736,6 +772,13 @@
         <groupId>org.assertj</groupId>
         <artifactId>assertj-core</artifactId>
         <version>${version.assertj-core}</version>
+        <scope>test</scope>
+      </dependency>
+
+      <dependency>
+        <groupId>org.mockito</groupId>
+        <artifactId>mockito-inline</artifactId>
+        <version>${version.mockito}</version>
         <scope>test</scope>
       </dependency>
 
@@ -778,6 +821,12 @@
         </exclusions>
       </dependency>
 
+      <dependency>
+        <groupId>io.fabric8</groupId>
+        <artifactId>kube-api-test</artifactId>
+        <version>${version.kube-api-test}</version>
+        <scope>test</scope>
+      </dependency>
       <!-- == doc ====================================== -->
       <dependency>
         <groupId>org.asciidoctor</groupId>

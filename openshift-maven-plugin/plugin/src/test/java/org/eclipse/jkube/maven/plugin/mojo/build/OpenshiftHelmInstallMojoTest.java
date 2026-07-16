@@ -14,10 +14,13 @@
 package org.eclipse.jkube.maven.plugin.mojo.build;
 
 import com.marcnuri.helm.Helm;
+import io.fabric8.kubeapitest.junit.EnableKubeAPIServer;
+import io.fabric8.kubeapitest.junit.KubeConfig;
+import io.fabric8.kubernetes.client.Config;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
-import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
+import io.fabric8.kubernetes.client.KubernetesClientBuilder;
 import org.apache.commons.io.FileUtils;
+import org.apache.maven.plugin.MojoExecution;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.settings.Settings;
 import org.eclipse.jkube.kit.common.access.ClusterConfiguration;
@@ -33,23 +36,30 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
-import static org.eclipse.jkube.kit.common.util.KubernetesMockServerUtil.prepareMockWebServerExpectationsForAggregatedDiscoveryEndpoints;
 
-@EnableKubernetesMockClient(crud = true)
+@EnableKubeAPIServer
 class OpenshiftHelmInstallMojoTest {
+
+  @KubeConfig
+  static String kubeConfigYaml;
   @TempDir
   private Path projectDir;
+  private KubernetesClient kubernetesClient;
   private PrintStream originalPrintStream;
   private ByteArrayOutputStream outputStream;
   private OpenshiftHelmInstallMojo openShiftHelmInstallMojo;
-  private KubernetesClient kubernetesClient;
-  private KubernetesMockServer server;
 
   @BeforeEach
   void setUp() throws Exception {
+    kubernetesClient = new KubernetesClientBuilder().withConfig(Config.fromKubeconfig(kubeConfigYaml)).build();
+    kubernetesClient.apps().deployments().withTimeout(1, TimeUnit.SECONDS).delete();
+    kubernetesClient.pods().withTimeout(1, TimeUnit.SECONDS).delete();
+    kubernetesClient.configMaps().withTimeout(1, TimeUnit.SECONDS).delete();
+    kubernetesClient.secrets().withTimeout(1, TimeUnit.SECONDS).delete();
     originalPrintStream = System.out;
     outputStream = new ByteArrayOutputStream();
     System.setOut(new PrintStream(outputStream));
@@ -79,12 +89,11 @@ class OpenshiftHelmInstallMojoTest {
       .setOutputDirectory(projectDir.resolve("target").resolve("classes").toFile().getAbsolutePath());
     openShiftHelmInstallMojo.project.getBuild().setDirectory(projectDir.resolve("target").toFile().getAbsolutePath());
     openShiftHelmInstallMojo.project.setFile(projectDir.resolve("target").toFile());
-    // Remove after https://github.com/fabric8io/kubernetes-client/issues/6062 is fixed
-    prepareMockWebServerExpectationsForAggregatedDiscoveryEndpoints(server);
   }
 
   @AfterEach
   void tearDown() {
+    kubernetesClient.close();
     System.setOut(originalPrintStream);
     System.clearProperty("jkube.kubernetesTemplate");
     openShiftHelmInstallMojo = null;
@@ -126,5 +135,19 @@ class OpenshiftHelmInstallMojoTest {
     assertThatIllegalStateException()
       .isThrownBy(() -> openShiftHelmInstallMojo.execute())
       .withMessageContaining("the-dependency not found");
+  }
+
+  @Test
+  void execute_whenSkipTrue_shouldDoNothing() throws Exception {
+    // Given
+    openShiftHelmInstallMojo.skip = true;
+    openShiftHelmInstallMojo.mojoExecution = new MojoExecution(new org.apache.maven.plugin.descriptor.MojoDescriptor());
+    openShiftHelmInstallMojo.mojoExecution.getMojoDescriptor().setPluginDescriptor(new org.apache.maven.plugin.descriptor.PluginDescriptor());
+    openShiftHelmInstallMojo.mojoExecution.getMojoDescriptor().setGoal("helm-install");
+    openShiftHelmInstallMojo.mojoExecution.getMojoDescriptor().getPluginDescriptor().setGoalPrefix("oc");
+    // When
+    openShiftHelmInstallMojo.execute();
+    // Then
+    assertThat(outputStream.toString()).contains("`oc:helm-install` goal is skipped.");
   }
 }

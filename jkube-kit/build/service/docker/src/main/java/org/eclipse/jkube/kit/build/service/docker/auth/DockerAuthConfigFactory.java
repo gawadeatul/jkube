@@ -14,9 +14,10 @@
 package org.eclipse.jkube.kit.build.service.docker.auth;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.google.common.net.UrlEscapers;
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.jkube.kit.build.api.auth.AuthConfigFactory;
+import org.eclipse.jkube.kit.common.Environment;
+import org.eclipse.jkube.kit.common.SystemEnvironment;
 import org.eclipse.jkube.kit.build.service.docker.auth.ecr.AwsSdkAuthConfigFactory;
 import org.eclipse.jkube.kit.build.service.docker.auth.ecr.AwsSdkHelper;
 import org.eclipse.jkube.kit.common.RegistryServerConfiguration;
@@ -39,6 +40,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URLEncoder;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.HashMap;
@@ -312,7 +315,7 @@ public class DockerAuthConfigFactory implements AuthConfigFactory {
 
             // get temporary credentials
             request = new HttpGet("http://169.254.169.254/latest/meta-data/iam/security-credentials/"
-                    + UrlEscapers.urlPathSegmentEscaper().escape(instanceRole));
+                    + URLEncoder.encode(instanceRole, StandardCharsets.UTF_8.name()));
             request.setConfig(conf);
             try (CloseableHttpResponse response = client.execute(request)) {
                 if (response.getStatusLine().getStatusCode() != HttpStatus.SC_OK) {
@@ -352,13 +355,17 @@ public class DockerAuthConfigFactory implements AuthConfigFactory {
     }
 
     protected static AuthConfig getAuthConfigFromOpenShiftConfig(LookupMode lookupMode, Map authConfigMap) {
+        return getAuthConfigFromOpenShiftConfig(lookupMode, authConfigMap, SystemEnvironment.getInstance());
+    }
+
+    protected static AuthConfig getAuthConfigFromOpenShiftConfig(LookupMode lookupMode, Map authConfigMap, Environment environment) {
         final String useOpenAuthModeKey = lookupMode.asSysProperty(AUTH_USE_OPENSHIFT_AUTH);
         final String useOpenAuthMode = System.getProperty(useOpenAuthModeKey);
         // Check for system property
         if (StringUtils.isNotBlank(useOpenAuthMode)) {
             boolean useOpenShift = Boolean.parseBoolean(useOpenAuthMode);
             if (useOpenShift) {
-                return validateMandatoryOpenShiftLogin(readKubeConfigAuth(), useOpenAuthModeKey);
+                return validateMandatoryOpenShiftLogin(readKubeConfigAuth(), useOpenAuthModeKey, environment);
             } else {
                 return null;
             }
@@ -368,7 +375,7 @@ public class DockerAuthConfigFactory implements AuthConfigFactory {
         Map<String, String> mapToCheck = getAuthConfigMapToCheck(lookupMode,authConfigMap);
         if (mapToCheck != null && mapToCheck.containsKey(AUTH_USE_OPENSHIFT_AUTH) &&
             Boolean.parseBoolean(mapToCheck.get(AUTH_USE_OPENSHIFT_AUTH))) {
-                return validateMandatoryOpenShiftLogin(readKubeConfigAuth(), useOpenAuthModeKey);
+                return validateMandatoryOpenShiftLogin(readKubeConfigAuth(), useOpenAuthModeKey, environment);
         } else {
             return null;
         }
@@ -532,7 +539,7 @@ public class DockerAuthConfigFactory implements AuthConfigFactory {
     }
 
     private static AuthConfig getAuthConfigViaAwsSdk(AwsSdkHelper awsSdkHelper, KitLogger log) {
-        boolean credProviderPresent = awsSdkHelper.isDefaultAWSCredentialsProviderChainPresentInClassPath();
+        boolean credProviderPresent = awsSdkHelper.isAwsSdkAvailable();
         if (!credProviderPresent) {
             log.info("It appears that you're using AWS ECR." +
                     " Consider integrating the AWS SDK in order to make use of common AWS authentication mechanisms," +
@@ -578,12 +585,12 @@ public class DockerAuthConfigFactory implements AuthConfigFactory {
         return null;
     }
 
-    private static AuthConfig validateMandatoryOpenShiftLogin(AuthConfig openShiftAuthConfig, String useOpenAuthModeProp) {
+    private static AuthConfig validateMandatoryOpenShiftLogin(AuthConfig openShiftAuthConfig, String useOpenAuthModeProp, Environment environment) {
         if (openShiftAuthConfig != null) {
             return openShiftAuthConfig;
         }
         // No login found
-        String kubeConfigEnv = System.getenv("KUBECONFIG");
+        String kubeConfigEnv = environment.getEnv("KUBECONFIG");
         throw new IllegalStateException(
             String.format("System property %s set, but not active user and/or token found in %s. " +
                           "Please use 'oc login' for connecting to OpenShift.",

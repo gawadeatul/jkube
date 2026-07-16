@@ -136,6 +136,12 @@ public class ResourceMojo extends AbstractJKubeMojo {
 
     @Override
     public void executeInternal() throws MojoExecutionException, MojoFailureException {
+        try {
+            cleanWorkDirectory();
+        } catch (IOException e) {
+            throw new MojoExecutionException("Failed to clean work directory", e);
+        }
+
         if (useDekorate(javaProject) && mergeWithDekorate) {
             log.info("Dekorate detected, merging JKube and Dekorate resources");
             System.setProperty("dekorate.input.dir", DEFAULT_RESOURCE_LOCATION);
@@ -178,12 +184,12 @@ public class ResourceMojo extends AbstractJKubeMojo {
     private void validateIfRequired(File resourceDir, ResourceClassifier classifier)
         throws MojoExecutionException, MojoFailureException {
         try {
-            if (!skipResourceValidation) {
+            if (Boolean.FALSE.equals(skipResourceValidation)) {
                 log.verbose("Validating resources");
                 new ResourceValidator(resourceDir, classifier, log).validate();
             }
         } catch (ConstraintViolationException e) {
-            if (failOnValidationError) {
+            if (Boolean.TRUE.equals(failOnValidationError)) {
                 log.error("[[R]]" + e.getMessage() + "[[R]]");
                 log.error("[[R]]use \"mvn -Djkube.skipResourceValidation=true\" option to skip the validation[[R]]");
                 throw new MojoFailureException("Failed to generate kubernetes descriptor");
@@ -191,7 +197,7 @@ public class ResourceMojo extends AbstractJKubeMojo {
                 log.warn("[[Y]]" + e.getMessage() + "[[Y]]");
             }
         } catch (Exception e) {
-            if (failOnValidationError) {
+            if (Boolean.TRUE.equals(failOnValidationError)) {
                 throw new MojoExecutionException("Failed to validate resources", e);
             } else {
                 log.warn("Failed to validate resources: %s", e.getMessage());

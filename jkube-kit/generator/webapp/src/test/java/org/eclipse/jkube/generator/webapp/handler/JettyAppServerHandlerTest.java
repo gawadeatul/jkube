@@ -21,6 +21,7 @@ import java.util.Collections;
 
 import org.eclipse.jkube.generator.api.GeneratorContext;
 import org.eclipse.jkube.kit.common.Plugin;
+import org.eclipse.jkube.kit.config.image.WatchMode;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -106,12 +107,42 @@ class JettyAppServerHandlerTest {
     final JettyAppSeverHandler handler = new JettyAppSeverHandler(generatorContext);
     // Then
     assertThat(handler)
-        .satisfies(h -> assertThat(h.getFrom()).startsWith("quay.io/jkube/jkube-jetty9:"))
+        .returns("jetty", JettyAppSeverHandler::getName)
+        .satisfies(h -> assertThat(h.getFrom()).startsWith("quay.io/jkube/jkube-jetty12:"))
         .returns(Collections.singletonList("8080"), JettyAppSeverHandler::exposedPorts)
         .returns("/deployments", JettyAppSeverHandler::getDeploymentDir)
         .returns("deployments", JettyAppSeverHandler::getAssemblyName)
         .returns("/usr/local/s2i/run", JettyAppSeverHandler::getCommand)
         .returns(null, JettyAppSeverHandler::getUser)
         .returns(true, JettyAppSeverHandler::supportsS2iBuild);
+  }
+
+  @Test
+  void getEnv_withWatchModeCopy_shouldReturnScanIntervalForHotDeploy() {
+    // Given
+    when(generatorContext.getWatchMode()).thenReturn(WatchMode.copy);
+    // When
+    final JettyAppSeverHandler handler = new JettyAppSeverHandler(generatorContext);
+    // Then
+    assertThat(handler.getEnv())
+        .containsEntry("JAVA_TOOL_OPTIONS", "-Djetty.deploy.scanInterval=1");
+  }
+
+  @Test
+  void getEnv_withWatchModeBuild_shouldNotReturnScanInterval() {
+    // Given
+    when(generatorContext.getWatchMode()).thenReturn(WatchMode.build);
+    // When
+    final JettyAppSeverHandler handler = new JettyAppSeverHandler(generatorContext);
+    // Then
+    assertThat(handler.getEnv()).isEmpty();
+  }
+
+  @Test
+  void getEnv_withNoWatchMode_shouldNotReturnScanInterval() {
+    // When
+    final JettyAppSeverHandler handler = new JettyAppSeverHandler(generatorContext);
+    // Then
+    assertThat(handler.getEnv()).isEmpty();
   }
 }

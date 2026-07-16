@@ -14,16 +14,19 @@
 package org.eclipse.jkube.gradle.plugin.task;
 
 import com.marcnuri.helm.Helm;
-import io.fabric8.kubernetes.api.model.Secret;
-import io.fabric8.kubernetes.api.model.SecretListBuilder;
+import io.fabric8.kubeapitest.junit.EnableKubeAPIServer;
+import io.fabric8.kubeapitest.junit.KubeConfig;
+import io.fabric8.kubernetes.client.Config;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
-import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
+import io.fabric8.kubernetes.client.KubernetesClientBuilder;
 import org.apache.commons.io.FileUtils;
+import org.eclipse.jkube.gradle.plugin.GradleUtil;
 import org.eclipse.jkube.gradle.plugin.OpenShiftExtension;
 import org.eclipse.jkube.gradle.plugin.TestOpenShiftExtension;
+import org.eclipse.jkube.kit.common.KitLogger;
 import org.eclipse.jkube.kit.common.access.ClusterConfiguration;
 import org.eclipse.jkube.kit.resource.helm.HelmConfig;
+import org.gradle.api.provider.Property;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -33,25 +36,31 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
-import static org.eclipse.jkube.kit.common.util.KubernetesMockServerUtil.prepareMockWebServerExpectationsForAggregatedDiscoveryEndpoints;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-@EnableKubernetesMockClient(crud = true)
+@EnableKubeAPIServer
 class OpenShiftHelmUninstallTaskTest {
   @RegisterExtension
   private final TaskEnvironmentExtension taskEnvironment = new TaskEnvironmentExtension();
+  @KubeConfig
+  static String kubeConfigYaml;
   private KubernetesClient kubernetesClient;
-  private KubernetesMockServer server;
   private TestOpenShiftExtension extension;
 
   @BeforeEach
   void setUp() throws IOException {
     extension = new TestOpenShiftExtension();
-    // Remove after https://github.com/fabric8io/kubernetes-client/issues/6062 is fixed
-    prepareMockWebServerExpectationsForAggregatedDiscoveryEndpoints(server);
+    kubernetesClient = new KubernetesClientBuilder().withConfig(Config.fromKubeconfig(kubeConfigYaml)).build();
+    kubernetesClient.apps().deployments().withTimeout(1, TimeUnit.SECONDS).delete();
+    kubernetesClient.pods().withTimeout(1, TimeUnit.SECONDS).delete();
+    kubernetesClient.configMaps().withTimeout(1, TimeUnit.SECONDS).delete();
+    kubernetesClient.secrets().withTimeout(1, TimeUnit.SECONDS).delete();
     Helm.create().withDir(taskEnvironment.getRoot().toPath()).withName("empty-project").call();
     Path helmChartOutputDir = taskEnvironment.getRoot().toPath().resolve("build").resolve("jkube").resolve("helm");
     Files.createDirectories(helmChartOutputDir.resolve("openshift"));
@@ -70,6 +79,7 @@ class OpenShiftHelmUninstallTaskTest {
 
   @AfterEach
   void tearDown() {
+    kubernetesClient.close();
     System.clearProperty("jkube.kubernetesTemplate");
   }
 
@@ -78,16 +88,10 @@ class OpenShiftHelmUninstallTaskTest {
   void runTask_withHelmReleasePresentInKubernetesCluster_shouldSucceed() {
     // Given
     OpenShiftHelmUninstallTask openShiftHelmUninstallTask = new OpenShiftHelmUninstallTask(OpenShiftExtension.class);
+    openShiftHelmUninstallTask.kubernetesExtension.javaProject = GradleUtil.convertGradleProject(openShiftHelmUninstallTask.getProject());
+    openShiftHelmUninstallTask.kitLogger = new KitLogger.SilentLogger();
     openShiftHelmUninstallTask.init();
     openShiftHelmUninstallTask.jKubeServiceHub.getHelmService().install(extension.helm);
-    // Should be removed once https://github.com/fabric8io/kubernetes-client/issues/6220 gets fixed
-    Secret secret = kubernetesClient.secrets().withName("sh.helm.release.v1.empty-project.v1").get();
-    server.expect().get().withPath("/api/v1/namespaces/test/secrets?labelSelector=name%3Dempty-project%2Cowner%3Dhelm")
-      .andReturn(200, new SecretListBuilder()
-        .addToItems(secret)
-        .build())
-      .once();
-
     // When
     openShiftHelmUninstallTask.runTask();
     // Then
@@ -104,5 +108,25 @@ class OpenShiftHelmUninstallTaskTest {
     assertThatIllegalStateException()
       .isThrownBy(openShiftHelmUninstallTask::runTask)
       .withMessageContaining(" not found");
+  }
+
+  @Test
+  void runTask_withSkip_shouldDoNothing() {
+    // Given
+    extension = new TestOpenShiftExtension() {
+      @Override
+      public Property<Boolean> getSkip() {
+        return super.getSkip().value(true);
+      }
+    };
+    when(taskEnvironment.project.getExtensions().getByType(OpenShiftExtension.class)).thenReturn(extension);
+    final OpenShiftHelmUninstallTask task = new OpenShiftHelmUninstallTask(OpenShiftExtension.class);
+    when(task.getName()).thenReturn("ocHelmUninstall");
+
+    // When
+    task.runTask();
+
+    // Then
+    verify(taskEnvironment.logger, times(1)).lifecycle(contains("oc: `ocHelmUninstall` task is skipped."));
   }
 }

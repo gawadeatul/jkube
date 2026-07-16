@@ -20,7 +20,7 @@
 
   <groupId>org.eclipse.jkube.quickstarts.maven</groupId>
   <artifactId>xml-config</artifactId>
-  <version>1.17.0</version>
+  <version>1.19.0</version>
   <name>Eclipse JKube :: Quickstarts :: Maven :: XML configuration</name>
   <packaging>jar</packaging>
 
@@ -174,7 +174,7 @@
               <!-- "alias" is used to correlate to the containers in the pod spec -->
               <alias>camel-service</alias>
               <build>
-                <from>quay.io/jkube/jkube-java-11:0.0.13</from>
+                <from>quay.io/jkube/jkube-java-11:0.0.28</from>
                 <assembly>
                   <targetDir>/deployments</targetDir>
                   <inline>

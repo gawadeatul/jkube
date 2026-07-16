@@ -12,12 +12,14 @@
 #   Red Hat, Inc. - initial API and implementation
 #
 
-FROM quay.io/jkube/jkube-java:0.0.15
+FROM quay.io/jkube/jkube-java:0.0.28
 
 ENV JAVA_APP_DIR=/deployments
 
-COPY maven/target/*.jar /deployments/app.jar
-COPY maven/target/classes/jkube-extra/* /deployments/files/
+WORKDIR ${JAVA_APP_DIR}
+
+COPY maven/target/*.jar app.jar
+COPY maven/target/classes/jkube-extra/* files/
 
 EXPOSE 8080
 

@@ -14,10 +14,13 @@
 package org.eclipse.jkube.maven.plugin.mojo.build;
 
 import com.marcnuri.helm.Helm;
+import io.fabric8.kubeapitest.junit.EnableKubeAPIServer;
+import io.fabric8.kubeapitest.junit.KubeConfig;
+import io.fabric8.kubernetes.client.Config;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
-import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
+import io.fabric8.kubernetes.client.KubernetesClientBuilder;
 import org.apache.commons.io.FileUtils;
+import org.apache.maven.plugin.MojoExecution;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.settings.Settings;
 import org.eclipse.jkube.kit.common.access.ClusterConfiguration;
@@ -33,26 +36,31 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
-import static org.eclipse.jkube.kit.common.util.KubernetesMockServerUtil.prepareMockWebServerExpectationsForAggregatedDiscoveryEndpoints;
 
-@EnableKubernetesMockClient(crud = true)
+@EnableKubeAPIServer
 class HelmInstallMojoTest {
+
+  @KubeConfig
+  static String kubeConfigYaml;
   @TempDir
   private Path projectDir;
+  private KubernetesClient kubernetesClient;
   private PrintStream originalPrintStream;
   private ByteArrayOutputStream outputStream;
   private HelmInstallMojo helmInstallMojo;
-  private KubernetesClient kubernetesClient;
-  private KubernetesMockServer server;
 
   @BeforeEach
   void setUp() throws Exception {
+    kubernetesClient = new KubernetesClientBuilder().withConfig(Config.fromKubeconfig(kubeConfigYaml)).build();
+    kubernetesClient.apps().deployments().withTimeout(1, TimeUnit.SECONDS).delete();
+    kubernetesClient.pods().withTimeout(1, TimeUnit.SECONDS).delete();
+    kubernetesClient.configMaps().withTimeout(1, TimeUnit.SECONDS).delete();
+    kubernetesClient.secrets().withTimeout(1, TimeUnit.SECONDS).delete();
     originalPrintStream = System.out;
-    // Remove after https://github.com/fabric8io/kubernetes-client/issues/6062 is fixed
-    prepareMockWebServerExpectationsForAggregatedDiscoveryEndpoints(server);
     outputStream = new ByteArrayOutputStream();
     System.setOut(new PrintStream(outputStream));
     Helm.create().withDir(projectDir).withName("empty-project").call();
@@ -85,6 +93,7 @@ class HelmInstallMojoTest {
 
   @AfterEach
   void tearDown() {
+    kubernetesClient.close();
     System.setOut(originalPrintStream);
     System.clearProperty("jkube.kubernetesTemplate");
     helmInstallMojo = null;
@@ -126,5 +135,19 @@ class HelmInstallMojoTest {
     assertThatIllegalStateException()
       .isThrownBy(() -> helmInstallMojo.execute())
       .withMessageContaining("the-dependency not found");
+  }
+
+  @Test
+  void execute_whenSkipTrue_shouldDoNothing() throws Exception {
+    // Given
+    helmInstallMojo.skip = true;
+    helmInstallMojo.mojoExecution = new MojoExecution(new org.apache.maven.plugin.descriptor.MojoDescriptor());
+    helmInstallMojo.mojoExecution.getMojoDescriptor().setPluginDescriptor(new org.apache.maven.plugin.descriptor.PluginDescriptor());
+    helmInstallMojo.mojoExecution.getMojoDescriptor().setGoal("helm-install");
+    helmInstallMojo.mojoExecution.getMojoDescriptor().getPluginDescriptor().setGoalPrefix("k8s");
+    // When
+    helmInstallMojo.execute();
+    // Then
+    assertThat(outputStream.toString()).contains("`k8s:helm-install` goal is skipped.");
   }
 }

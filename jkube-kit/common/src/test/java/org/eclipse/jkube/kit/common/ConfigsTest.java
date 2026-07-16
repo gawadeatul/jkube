@@ -31,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class ConfigsTest {
 
   public enum ConfigWithDefaults implements Configs.Config {
-    ONE, TWO;
+    ONE, TWO
   }
 
   @AllArgsConstructor
@@ -89,7 +89,7 @@ class ConfigsTest {
 
   @Test
   void getStringValueTest() {
-    String test = RandomStringUtils.randomAlphabetic(10);
+    String test = RandomStringUtils.secureStrong().nextAlphabetic(10);
     assertThat(Configs.asString(test)).isEqualTo(test);
   }
 

@@ -20,7 +20,7 @@
 
   <groupId>org.eclipse.jkube.quickstarts.maven</groupId>
   <artifactId>quarkus-customized-image</artifactId>
-  <version>1.17.0</version>
+  <version>1.19.0</version>
   <name>Eclipse JKube :: Quickstarts :: Maven :: Quarkus customized Image</name>
   <description>
     Quarkus application with a single JAX-RS endpoint.
@@ -34,7 +34,7 @@
     <jkube.version>${project.version}</jkube.version>
     <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
     <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
-    <version.quarkus>3.9.1</version.quarkus>
+    <version.quarkus>3.15.3.1</version.quarkus>
     <jkube.build.pullSecret>12819530-ocp42-exposed-env-pull-secret-pull-secret</jkube.build.pullSecret>
   </properties>
 

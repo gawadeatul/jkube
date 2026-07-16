@@ -13,15 +13,14 @@
  */
 package org.eclipse.jkube.gradle.plugin.task;
 
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.jkube.generator.api.DefaultGeneratorManager;
 import org.eclipse.jkube.generator.api.GeneratorContext;
@@ -33,6 +32,8 @@ import org.eclipse.jkube.kit.common.KitLogger;
 import org.eclipse.jkube.kit.common.RegistryConfig;
 import org.eclipse.jkube.kit.common.util.LazyBuilder;
 import org.eclipse.jkube.kit.common.util.ResourceUtil;
+import org.eclipse.jkube.kit.common.util.ResourceFileProcessing;
+import org.eclipse.jkube.kit.common.util.ResourceFileProcessors;
 import org.eclipse.jkube.kit.common.access.ClusterConfiguration;
 import org.eclipse.jkube.kit.config.image.ImageConfiguration;
 import org.eclipse.jkube.kit.config.resource.ResourceConfig;
@@ -68,17 +69,17 @@ public abstract class AbstractJKubeTask extends DefaultTask implements Kubernete
 
   @TaskAction
   public final void runTask() {
-    init();
+    kubernetesExtension.javaProject = GradleUtil.convertGradleProject(getProject());
+    kitLogger = createLogger(null);
     if (shouldSkip()) {
         kitLogger.info("`%s` task is skipped.", this.getName());
         return;
     }
+    init();
     run();
   }
 
   protected void init() {
-    kubernetesExtension.javaProject = GradleUtil.convertGradleProject(getProject());
-    kitLogger = createLogger(null);
     clusterConfiguration = initClusterConfiguration();
     jKubeServiceHub = initJKubeServiceHubBuilder().build();
     kubernetesExtension.resources = updateResourceConfigNamespace(kubernetesExtension.getNamespaceOrNull(), kubernetesExtension.resources);
@@ -115,7 +116,7 @@ public abstract class AbstractJKubeTask extends DefaultTask implements Kubernete
   }
 
   protected final KitLogger createLogger(String prefix) {
-    return new GradleLogger(getLogger(), isAnsiEnabled(), getLogPrefix() + Optional.ofNullable(prefix).map(" "::concat).orElse(""));
+    return new GradleLogger(getLogger(), isAnsiEnabled(), getLogPrefix() + Optional.ofNullable(prefix).map(" "::concat).orElse(""), kubernetesExtension.getVerboseOrDefault());
   }
 
   protected JKubeServiceHub.JKubeServiceHubBuilder initJKubeServiceHubBuilder() {
@@ -178,7 +179,8 @@ public abstract class AbstractJKubeTask extends DefaultTask implements Kubernete
         .openshiftNamespace(StringUtils.isNotBlank(kubernetesExtension.getNamespaceOrNull()) ? kubernetesExtension.getNamespaceOrNull() : clusterConfiguration.getNamespace())
         .buildTimestamp(getBuildTimestamp(null, null, kubernetesExtension.javaProject.getBuildDirectory().getAbsolutePath(),
             DOCKER_BUILD_TIMESTAMP))
-        .filter(kubernetesExtension.getFilterOrNull());
+        .filter(kubernetesExtension.getFilterOrNull())
+        .watchMode(kubernetesExtension.getWatchModeOrDefault());
   }
 
   protected ClusterConfiguration initClusterConfiguration() {
@@ -208,6 +210,14 @@ public abstract class AbstractJKubeTask extends DefaultTask implements Kubernete
     return manifest;
   }
 
+  protected void cleanWorkDirectory() throws IOException {
+    final File workDir = kubernetesExtension.getWorkDirectoryOrDefault();
+    if (workDir.exists()) {
+      kitLogger.verbose("Cleaning work directory: %s", workDir);
+      FileUtils.cleanDirectory(workDir);
+    }
+  }
+
   private File[] gradleFilterFiles(File[] resourceFiles) throws IOException {
     if (resourceFiles == null) {
       return new File[0];
@@ -216,17 +226,14 @@ public abstract class AbstractJKubeTask extends DefaultTask implements Kubernete
     if (!outDir.exists() && !outDir.mkdirs()) {
       throw new IOException("Cannot create working dir " + outDir);
     }
-    File[] ret = new File[resourceFiles.length];
-    int i = 0;
-    for (File resource : resourceFiles) {
-      File targetFile = new File(outDir, resource.getName());
-      String resourceFragmentInterpolated = interpolate(resource, kubernetesExtension.javaProject.getProperties(),
-        kubernetesExtension.getFilter().getOrNull());
-      try (BufferedWriter writer = new BufferedWriter(new FileWriter(targetFile))) {
-        writer.write(resourceFragmentInterpolated);
-      }
-      ret[i++] = targetFile;
-    }
-    return ret;
+
+    return ResourceFileProcessing.builder()
+      .withFiles(resourceFiles)
+      .withOutputDirectory(outDir)
+      .addProcessor(context ->
+        interpolate(context.getSourceFile(), kubernetesExtension.javaProject.getProperties(),
+          kubernetesExtension.getFilter().getOrNull()))
+      .addProcessor(ResourceFileProcessors.mergeYamlIfExists())
+      .process();
   }
 }

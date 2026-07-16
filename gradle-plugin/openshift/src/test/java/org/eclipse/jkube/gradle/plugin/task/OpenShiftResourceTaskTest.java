@@ -13,16 +13,22 @@
  */
 package org.eclipse.jkube.gradle.plugin.task;
 
+import java.io.File;
 import java.nio.file.Paths;
 
+import org.apache.commons.io.FileUtils;
 import org.eclipse.jkube.gradle.plugin.OpenShiftExtension;
 import org.eclipse.jkube.gradle.plugin.TestOpenShiftExtension;
 
+import org.gradle.api.provider.Property;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
 import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class OpenShiftResourceTaskTest {
@@ -51,5 +57,45 @@ class OpenShiftResourceTaskTest {
       .hasContent("---\n" +
         "apiVersion: v1\n" +
         "kind: List\n");
+  }
+
+  @Test
+  void runTask_withExistingWorkDir_shouldCleanWorkDirBeforeProcessing() throws Exception {
+    // Given
+    final File workDir = taskEnvironment.getRoot().toPath().resolve("build").resolve("jkube-temp").toFile();
+    FileUtils.forceMkdir(workDir);
+    final File staleFile = new java.io.File(workDir, "stale-file.yml");
+    FileUtils.write(staleFile, "stale: content", java.nio.charset.StandardCharsets.UTF_8);
+    assertThat(staleFile).exists();
+    OpenShiftResourceTask resourceTask = new OpenShiftResourceTask(OpenShiftExtension.class);
+
+    // When
+    resourceTask.runTask();
+
+    // Then
+    assertThat(staleFile).doesNotExist();
+    assertThat(taskEnvironment.getRoot().toPath()
+      .resolve(Paths.get("build", "classes", "java", "main", "META-INF", "jkube", "openshift.yml")))
+      .exists();
+  }
+
+  @Test
+  void runTask_withSkip_shouldDoNothing() {
+    // Given
+    TestOpenShiftExtension extension = new TestOpenShiftExtension() {
+      @Override
+      public Property<Boolean> getSkip() {
+        return super.getSkip().value(true);
+      }
+    };
+    when(taskEnvironment.project.getExtensions().getByType(OpenShiftExtension.class)).thenReturn(extension);
+    final OpenShiftResourceTask task = new OpenShiftResourceTask(OpenShiftExtension.class);
+    when(task.getName()).thenReturn("ocResource");
+
+    // When
+    task.runTask();
+
+    // Then
+    verify(taskEnvironment.logger, times(1)).lifecycle(contains("oc: `ocResource` task is skipped."));
   }
 }
